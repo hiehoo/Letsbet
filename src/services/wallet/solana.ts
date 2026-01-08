@@ -162,6 +162,68 @@ export class SolanaService {
   }
 
   /**
+   * Get recent SOL transfers to master wallet
+   * Used for deposit detection
+   */
+  static async getRecentSolDeposits(
+    sinceSignature?: string
+  ): Promise<Array<{
+    signature: string;
+    from: string;
+    amount: number;
+    timestamp: number;
+  }>> {
+    const signatures = await connection.getSignaturesForAddress(
+      masterKeypair.publicKey,
+      {
+        until: sinceSignature,
+        limit: 100,
+      }
+    );
+
+    const deposits: Array<{
+      signature: string;
+      from: string;
+      amount: number;
+      timestamp: number;
+    }> = [];
+
+    for (const sig of signatures) {
+      try {
+        const tx = await connection.getParsedTransaction(sig.signature, {
+          maxSupportedTransactionVersion: 0,
+        });
+
+        if (!tx?.meta || tx.meta.err) continue;
+
+        // Find SOL transfer instruction to master wallet
+        const instructions = tx.transaction.message.instructions;
+        for (const ix of instructions) {
+          if ('parsed' in ix && ix.parsed?.type === 'transfer') {
+            const info = ix.parsed.info;
+            // SOL transfer to master wallet
+            if (
+              info.destination === masterKeypair.publicKey.toBase58() &&
+              info.source !== masterKeypair.publicKey.toBase58()
+            ) {
+              deposits.push({
+                signature: sig.signature,
+                from: info.source,
+                amount: Number(info.lamports) / LAMPORTS_PER_SOL,
+                timestamp: sig.blockTime || 0,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing SOL transaction:', sig.signature, e);
+      }
+    }
+
+    return deposits;
+  }
+
+  /**
    * Get recent USDC transfers to master wallet
    * Used for deposit detection
    */
