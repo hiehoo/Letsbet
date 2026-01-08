@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  telegramId    BigInt   @unique @map("telegram_id")
+  username      String?
+  balanceSol    Decimal  @default(0) @map("balance_sol") @db.Decimal(18, 9)
+  balanceUsdc   Decimal  @default(0) @map("balance_usdc") @db.Decimal(18, 6)
+  depositAddress String? @map("deposit_address")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  markets       Market[]
+  positions     Position[]
+  transactions  Transaction[]
+  disputes      Dispute[]
+  disputeVotes  DisputeVote[]
+
+  @@map("users")
+}
+
+model Market {
+  id              String   @id @default(uuid())
+  creatorId       String   @map("creator_id")
+  question        String
+  outcomeYes      String   @default("Yes") @map("outcome_yes")
+  outcomeNo       String   @default("No") @map("outcome_no")
+  bParam          Decimal  @map("b_param") @db.Decimal(18, 6)
+  sharesYes       Decimal  @default(0) @map("shares_yes") @db.Decimal(18, 6)
+  sharesNo        Decimal  @default(0) @map("shares_no") @db.Decimal(18, 6)
+  totalVolume     Decimal  @default(0) @map("total_volume") @db.Decimal(18, 6)
+  status          MarketStatus @default(ACTIVE)
+  resolvedOutcome Outcome? @map("resolved_outcome")
+  resolutionTime  DateTime? @map("resolution_time")
+  disputeDeadline DateTime? @map("dispute_deadline")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Group context - markets are group-exclusive
+  groupChatId     BigInt?  @map("group_chat_id")
+  groupTitle      String?  @map("group_title")
+
+  creator      User          @relation(fields: [creatorId], references: [id])
+  positions    Position[]
+  transactions Transaction[]
+  disputes     Dispute[]
+
+  @@index([groupChatId])
+  @@map("markets")
+}
+
+model Position {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  marketId  String   @map("market_id")
+  outcome   Outcome
+  shares    Decimal  @db.Decimal(18, 6)
+  costBasis Decimal  @map("cost_basis") @db.Decimal(18, 6)
+
+  user   User   @relation(fields: [userId], references: [id])
+  market Market @relation(fields: [marketId], references: [id])
+
+  @@unique([userId, marketId, outcome])
+  @@map("positions")
+}
+
+model Transaction {
+  id        String          @id @default(uuid())
+  userId    String          @map("user_id")
+  marketId  String?         @map("market_id")
+  type      TransactionType
+  outcome   Outcome?
+  shares    Decimal?        @db.Decimal(18, 6)
+  amount    Decimal         @db.Decimal(18, 6)
+  price     Decimal?        @db.Decimal(18, 6)
+  txHash    String?         @map("tx_hash")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  user   User    @relation(fields: [userId], references: [id])
+  market Market? @relation(fields: [marketId], references: [id])
+
+  @@map("transactions")
+}
+
+model Dispute {
+  id              String        @id @default(uuid())
+  marketId        String        @map("market_id")
+  initiatorId     String        @map("initiator_id")
+  proposedOutcome Outcome       @map("proposed_outcome")
+  evidence        String?
+  stakeAmount     Decimal       @map("stake_amount") @db.Decimal(18, 6)
+  status          DisputeStatus @default(ACTIVE)
+  votesFor        Decimal       @default(0) @map("votes_for") @db.Decimal(18, 6)
+  votesAgainst    Decimal       @default(0) @map("votes_against") @db.Decimal(18, 6)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  resolvedAt      DateTime?     @map("resolved_at")
+
+  market    Market        @relation(fields: [marketId], references: [id])
+  initiator User          @relation(fields: [initiatorId], references: [id])
+  votes     DisputeVote[]
+
+  @@map("disputes")
+}
+
+model DisputeVote {
+  id        String   @id @default(uuid())
+  disputeId String   @map("dispute_id")
+  userId    String   @map("user_id")
+  vote      Vote
+  stake     Decimal  @db.Decimal(18, 6)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  dispute Dispute @relation(fields: [disputeId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([disputeId, userId])
+  @@map("dispute_votes")
+}
+
+enum MarketStatus {
+  ACTIVE
+  RESOLVED
+  DISPUTED
+  FINALIZED
+}
+
+enum Outcome {
+  YES
+  NO
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  BUY
+  SELL
+  PAYOUT
+  DISPUTE_STAKE
+  DISPUTE_REFUND
+}
+
+enum DisputeStatus {
+  ACTIVE
+  PASSED
+  REJECTED
+}
+
+enum Vote {
+  FOR
+  AGAINST
+}
