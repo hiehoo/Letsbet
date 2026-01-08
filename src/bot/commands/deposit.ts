@@ -7,11 +7,14 @@ export async function depositCommand(ctx: BotContext) {
   const user = getUser(ctx);
 
   const address = await WalletService.getDepositAddress(user.id);
-  const network = config.NODE_ENV === 'production' ? 'Mainnet' : 'Devnet';
+  const isDevnet = config.NODE_ENV !== 'production';
+  const networkWarning = isDevnet
+    ? `\n🚨 *⚠️ DEVNET - TEST NETWORK ONLY ⚠️*\n_Do NOT send real funds! This is for testing._\n`
+    : '';
 
   const message = `
 💳 *Deposit Instructions*
-
+${networkWarning}
 Send SOL or USDC to this address:
 
 \`${address}\`
@@ -20,7 +23,7 @@ Send SOL or USDC to this address:
 • SOL (native)
 • USDC (SPL token)
 
-*Network:* Solana ${network}
+*Network:* Solana ${isDevnet ? '🔶 DEVNET' : '🟢 Mainnet'}
 
 ⚠️ Deposits are detected automatically within ~30 seconds.
 

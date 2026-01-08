@@ -37,7 +37,11 @@ export function createBot() {
   const bot = new Bot<BotContext>(config.TELEGRAM_BOT_TOKEN);
 
   // Middleware (order matters!)
-  bot.use(session({ initial: (): SessionData => ({}) }));
+  // Use user ID for session key (not chat ID) so wizard state persists across group→DM
+  bot.use(session({
+    initial: (): SessionData => ({}),
+    getSessionKey: (ctx) => ctx.from?.id.toString(),
+  }));
   bot.use(contextRouter);  // Route by chat type FIRST
   bot.use(authMiddleware); // Then auth
 
