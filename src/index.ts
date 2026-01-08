@@ -3,6 +3,32 @@ import { createBot } from './bot/index.js';
 import { prisma } from './db/client.js';
 import { startDepositPoller } from './services/wallet/deposit-poller.js';
 import { startDisputeScheduler } from './services/dispute/scheduler.js';
+import { startSweepScheduler } from './services/wallet/sweep.js';
+import { AddressDerivation } from './services/wallet/address-derivation.js';
+
+/**
+ * Migrate existing users to have unique deposit addresses
+ */
+async function migrateUserDepositAddresses() {
+  const usersWithoutAddress = await prisma.user.findMany({
+    where: { depositAddress: null },
+  });
+
+  if (usersWithoutAddress.length === 0) return;
+
+  console.log(`Migrating ${usersWithoutAddress.length} users to unique deposit addresses...`);
+
+  for (const user of usersWithoutAddress) {
+    const depositAddress = AddressDerivation.getDepositAddress(user.id);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { depositAddress },
+    });
+    console.log(`  Assigned ${depositAddress} to user ${user.username || user.id}`);
+  }
+
+  console.log('Migration complete');
+}
 
 async function main() {
   console.log(`Starting Letsbet in ${config.NODE_ENV} mode...`);
@@ -11,9 +37,13 @@ async function main() {
   await prisma.$connect();
   console.log('Database connected');
 
+  // Migrate existing users to unique deposit addresses
+  await migrateUserDepositAddresses();
+
   // Start background jobs
   startDepositPoller(30000); // Every 30 seconds
   startDisputeScheduler(60000); // Every 60 seconds
+  startSweepScheduler(3600000); // Every hour (sweep funds to master)
 
   // Start bot
   const bot = createBot();

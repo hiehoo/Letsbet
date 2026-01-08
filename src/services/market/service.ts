@@ -116,7 +116,7 @@ export class MarketService {
       // Check balance
       const balance = Number(user.balanceUsdc);
       if (balance < amount) {
-        throw new Error('Insufficient balance');
+        throw new Error('Insufficient USDC balance');
       }
 
       // Validate bet limits

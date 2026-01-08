@@ -1,21 +1,26 @@
 import { prisma } from '../../db/client.js';
 import { SolanaService } from './solana.js';
+import { AddressDerivation } from './address-derivation.js';
 import { Decimal } from 'decimal.js';
 
 export class WalletService {
   /**
-   * Get or create user's deposit address
+   * Get or create user's unique deposit address
+   * Uses deterministic HD derivation from user ID
    */
   static async getDepositAddress(userId: string): Promise<string> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error('User not found');
 
+    // Return existing if already assigned
     if (user.depositAddress) {
       return user.depositAddress;
     }
 
-    const address = await SolanaService.getDepositAddress(userId);
+    // Derive unique address from user ID
+    const address = AddressDerivation.getDepositAddress(userId);
 
+    // Persist to DB
     await prisma.user.update({
       where: { id: userId },
       data: { depositAddress: address },

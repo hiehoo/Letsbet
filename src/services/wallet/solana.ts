@@ -261,22 +261,29 @@ export class SolanaService {
         if (!tx?.meta || tx.meta.err) continue;
 
         // Find USDC transfer instruction to master wallet
+        // SPL transfers can be 'transfer' or 'transferChecked'
         const instructions = tx.transaction.message.instructions;
         for (const ix of instructions) {
-          if ('parsed' in ix && ix.parsed?.type === 'transfer') {
-            const info = ix.parsed.info;
-            if (info.destination === masterAta.toBase58()) {
-              deposits.push({
-                signature: sig.signature,
-                from: info.source,
-                amount: Number(info.amount) / 10 ** USDC_DECIMALS,
-                timestamp: sig.blockTime || 0,
-              });
+          if ('parsed' in ix) {
+            const type = ix.parsed?.type;
+            if (type === 'transfer' || type === 'transferChecked') {
+              const info = ix.parsed.info;
+              const dest = info.destination || info.account;
+              if (dest === masterAta.toBase58()) {
+                // For transferChecked, amount is in tokenAmount.amount
+                const rawAmount = info.amount || info.tokenAmount?.amount;
+                deposits.push({
+                  signature: sig.signature,
+                  from: info.source || info.authority,
+                  amount: Number(rawAmount) / 10 ** USDC_DECIMALS,
+                  timestamp: sig.blockTime || 0,
+                });
+              }
             }
           }
         }
       } catch (e) {
-        console.error('Error parsing transaction:', sig.signature, e);
+        console.error('Error parsing USDC transaction:', sig.signature, e);
       }
     }
 

@@ -1,6 +1,7 @@
 import type { NextFunction } from 'grammy';
 import type { BotContext } from '../index.js';
 import { prisma } from '../../db/client.js';
+import { AddressDerivation } from '../../services/wallet/address-derivation.js';
 
 /**
  * In PRIVATE: Auto-register user
@@ -16,15 +17,24 @@ export async function authMiddleware(ctx: BotContext, next: NextFunction) {
     where: { telegramId },
   });
 
-  // In private chat: auto-register
+  // In private chat: auto-register with unique deposit address
   if (!user && isPrivate) {
+    // Create user first to get ID
     user = await prisma.user.create({
       data: {
         telegramId,
         username: ctx.from.username,
       },
     });
-    console.log(`New user registered: ${ctx.from.id}`);
+
+    // Derive unique deposit address from user ID
+    const depositAddress = AddressDerivation.getDepositAddress(user.id);
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { depositAddress },
+    });
+
+    console.log(`New user registered: ${ctx.from.id} with deposit address: ${depositAddress}`);
   }
 
   // In group chat: require registration
